@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>NODE NY — Wireframe Viewer</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewport"></canvas>
+
+      <div id="loading-screen">
+        <div id="loading-text">LOADING</div>
+      </div>
+
+      <header id="top-bar">
+        <button id="save-view-btn" type="button">SAVE VIEW</button>
+      </header>
+
+      <div id="joystick-zone"></div>
+
+      <div id="wall-slider-panel" hidden>
+        <label id="wall-slider-label" for="wall-slider">WALL</label>
+        <input id="wall-slider" type="range" min="0" max="360" step="0.1" value="0" />
+        <div id="wall-slider-value">0°</div>
+      </div>
+
+      <div id="fps-overlay" hidden></div>
+
+      <div id="save-view-modal" hidden>
+        <div id="save-view-modal-inner">
+          <img id="save-view-image" alt="Captured view" />
+          <div id="save-view-actions">
+            <button id="save-view-download" type="button">DOWNLOAD</button>
+            <button id="save-view-close" type="button">CLOSE</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

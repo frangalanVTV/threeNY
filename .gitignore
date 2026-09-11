@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Blender source files — not part of the web app, too large for the repo
+*.blend
+*.blend1
+Screenshot *.png

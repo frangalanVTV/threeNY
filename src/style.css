@@ -1,0 +1,237 @@
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: #111111;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------------- loading */
+
+#loading-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  transition: opacity 0.5s ease;
+  z-index: 50;
+}
+
+#loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#loading-text {
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: #999999;
+}
+
+/* -------------------------------------------------------------- top bar */
+
+#top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+  z-index: 10;
+  pointer-events: none;
+}
+
+#save-view-btn {
+  pointer-events: auto;
+  background: transparent;
+  border: 1px solid rgba(17, 17, 17, 0.35);
+  color: #111111;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  padding: 9px 18px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+  opacity: 0.75;
+}
+
+#save-view-btn:hover {
+  opacity: 1;
+  border-color: rgba(17, 17, 17, 0.7);
+}
+
+/* --------------------------------------------------------------- joystick */
+
+#joystick-zone {
+  position: absolute;
+  left: 28px;
+  bottom: 28px;
+  width: calc(var(--joystick-radius, 46px) * 2);
+  height: calc(var(--joystick-radius, 46px) * 2);
+  border-radius: 50%;
+  border: 1px solid rgba(17, 17, 17, 0.25);
+  background: rgba(255, 255, 255, 0.4);
+  z-index: 10;
+  touch-action: none;
+}
+
+#joystick-zone.active {
+  border-color: rgba(17, 17, 17, 0.5);
+}
+
+.joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--knob-radius, 20px) * 2);
+  height: calc(var(--knob-radius, 20px) * 2);
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.55);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ wall slider */
+
+#wall-slider-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(17, 17, 17, 0.15);
+  z-index: 10;
+  min-width: 260px;
+}
+
+#wall-slider-label {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: #555555;
+  white-space: nowrap;
+}
+
+#wall-slider {
+  flex: 1;
+  appearance: none;
+  height: 1px;
+  background: rgba(17, 17, 17, 0.3);
+  outline: none;
+}
+
+#wall-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #111111;
+  cursor: pointer;
+}
+
+#wall-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: #111111;
+  cursor: pointer;
+}
+
+#wall-slider-value {
+  font-size: 10px;
+  color: #555555;
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------- fps overlay */
+
+#fps-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: rgba(17, 17, 17, 0.6);
+  z-index: 10;
+}
+
+/* ---------------------------------------------------------------- modal */
+
+#save-view-modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  z-index: 100;
+}
+
+#save-view-modal-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+#save-view-image {
+  max-width: 90vw;
+  max-height: 78vh;
+  border: 1px solid rgba(17, 17, 17, 0.15);
+}
+
+#save-view-actions {
+  display: flex;
+  gap: 10px;
+}
+
+#save-view-actions button {
+  background: transparent;
+  border: 1px solid rgba(17, 17, 17, 0.35);
+  color: #111111;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  padding: 9px 18px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#save-view-actions button:hover {
+  border-color: rgba(17, 17, 17, 0.7);
+}
+
+[hidden] {
+  display: none !important;
+}
