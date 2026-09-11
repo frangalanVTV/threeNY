@@ -7,3 +7,4 @@ dist
 *.blend
 *.blend1
 Screenshot *.png
+.vercel

@@ -21,7 +21,9 @@ import {
  *  - walls: [{ name, group, lines, proxy, baseQuaternion }] — group is the
  *    original glTF node (untouched position/quaternion/scale = the
  *    Blender-authored pivot), lines is the visible wireframe, proxy is an
- *    invisible solid mesh used only for raycasting.
+ *    invisible (colorWrite:false) solid mesh reused for two things: wall
+ *    raycasting AND depth-buffer occlusion (hidden-line removal) — see
+ *    makeOccluderMaterial().
  */
 export async function loadModel(onProgress) {
   const loader = new GLTFLoader();
@@ -55,8 +57,16 @@ export async function loadModel(onProgress) {
   if (!buildingNode) {
     throw new Error(`Building node "${BUILDING_NODE_NAME}" was not found in ${MODEL_URL}`);
   }
-  const { edges: buildingEdges } = buildWireframeFromNode(buildingNode);
+  const { edges: buildingEdges, solid: buildingSolid } = buildWireframeFromNode(buildingNode);
+
+  if (buildingSolid) {
+    const buildingOccluder = new THREE.Mesh(buildingSolid, makeOccluderMaterial());
+    buildingOccluder.renderOrder = OCCLUDER_RENDER_ORDER;
+    buildingNode.add(buildingOccluder);
+  }
+
   const buildingLines = new THREE.LineSegments(buildingEdges, makeLineMaterial());
+  buildingLines.renderOrder = LINE_RENDER_ORDER;
   buildingNode.add(buildingLines);
 
   const walls = WALL_NODE_NAMES.map((name) => {
@@ -69,12 +79,18 @@ export async function loadModel(onProgress) {
 
     const lineMaterial = makeLineMaterial();
     const lines = new THREE.LineSegments(edges, lineMaterial);
+    lines.renderOrder = LINE_RENDER_ORDER;
     group.add(lines);
 
+    // Doubles as the depth-buffer occluder (hidden-line removal) and the
+    // raycast target for wall selection — same merged geometry, no
+    // duplication. It must render (visible = true) for the depth pass to
+    // take effect; colorWrite:false keeps it invisible on screen, and
+    // Raycaster ignores .visible entirely so selection is unaffected.
     let proxy = null;
     if (solid) {
-      proxy = new THREE.Mesh(solid, new THREE.MeshBasicMaterial());
-      proxy.visible = false;
+      proxy = new THREE.Mesh(solid, makeOccluderMaterial());
+      proxy.renderOrder = OCCLUDER_RENDER_ORDER;
       proxy.userData.wallName = name;
       group.add(proxy);
     }
@@ -108,10 +124,35 @@ function findByName(root, name) {
   return found;
 }
 
+// Depth occluders render before lines regardless of distance-based sort
+// order, so a wall's solid geometry reliably occludes lines from *other*
+// objects behind it (not just its own), matching Blender's non-X-Ray
+// wireframe shading (hidden-line removal).
+const OCCLUDER_RENDER_ORDER = 0;
+const LINE_RENDER_ORDER = 1;
+
 function makeLineMaterial() {
   return new THREE.LineBasicMaterial({
     color: LINE_COLOR,
     transparent: true,
     opacity: 1,
+    depthTest: true,
+    depthWrite: false,
+  });
+}
+
+// Invisible hidden-line-removal occluder: writes real depth so edges behind
+// it are hidden, but never writes color. polygonOffset nudges its written
+// depth slightly *away* from the camera so its own coincident edge lines
+// (at the true, un-offset depth) win the depth test cleanly instead of
+// z-fighting/flickering against their own surface.
+function makeOccluderMaterial() {
+  return new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: true,
+    depthTest: true,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
 }
