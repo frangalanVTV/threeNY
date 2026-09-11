@@ -65,10 +65,21 @@ WALL 6
 
 Each is an independent top-level node with its own Blender-authored pivot
 (origin). The app never recenters or recomputes a pivot from a bounding
-box — it rotates each wall directly around its own local Y axis in
-Three.js, which is local Z in Blender (see the comment in
-`src/wallsInteraction.js` for why that mapping holds regardless of a
-wall's base orientation/scale).
+box — it only ever changes the node's quaternion, never its position.
+
+The slider rotates each wall around the fixed **world-vertical axis**
+(pre-multiplying the delta quaternion — `Object3D.rotateOnWorldAxis`
+semantics), not a local axis. This was verified against the actual
+Blender file: three.js local Y is exactly where each wall's Blender local
+Z axis lands (confirmed by direct computation, true for all six nodes),
+but for WALL 1/3/5 (the `Cylinder.*` turnstile-drum meshes) that local Z
+axis itself isn't vertical in world space — it's a leftover
+cylinder-primitive axis lying almost flat. Rotating around it tumbled
+those three like a rolling pin instead of swinging like a hinged door.
+World-vertical rotation gives the identical result for WALL 2/4/6 (whose
+local Z already was vertical) and the correct hinge behavior for WALL
+1/3/5. See the comment in `src/wallsInteraction.js` for the full
+derivation.
 
 ## Project structure
 
