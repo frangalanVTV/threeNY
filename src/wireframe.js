@@ -19,11 +19,18 @@ export function buildWireframeFromNode(node) {
   const solidGeometries = [];
 
   node.updateWorldMatrix(true, true);
+  const nodeWorldInverse = node.matrixWorld.clone().invert();
 
   node.traverse((child) => {
     if (!child.isMesh) return;
 
-    const localMatrix = child.matrix;
+    // Geometry must end up in the node's own local space, since the lines
+    // are added as children of the node. traverse() visits the node itself
+    // too: a single-primitive glTF node *is* the Mesh (no child Group), so
+    // using child.matrix there would bake the node's own transform in a
+    // second time. Relative-to-node matrix is identity for the node itself
+    // and correct for descendants at any depth.
+    const localMatrix = nodeWorldInverse.clone().multiply(child.matrixWorld);
     const sourceGeometry = child.geometry;
 
     const positionOnly = new THREE.BufferGeometry();
@@ -60,6 +67,14 @@ export function buildWireframeFromNode(node) {
   // Strip the node's own children now that their geometry has been
   // extracted; the pivot (position/quaternion/scale) stays untouched.
   [...node.children].forEach((child) => node.remove(child));
+
+  // If the node itself was the Mesh, it stays in the scene as the pivot;
+  // give it empty geometry and a non-rendering material so the original
+  // shaded mesh is never drawn (its children — lines/proxy — still are).
+  if (node.isMesh) {
+    node.geometry = new THREE.BufferGeometry();
+    node.material = new THREE.MeshBasicMaterial({ visible: false });
+  }
 
   return { edges: mergedEdges, solid: mergedSolid };
 }
