@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { loadModel } from "./loadModel.js";
+import { loadModel, applyBlenderSensorFit } from "./loadModel.js";
 import { Navigation } from "./navigation.js";
 import { setupJoystick } from "./joystick.js";
 import { WallInteraction } from "./wallsInteraction.js";
@@ -89,7 +89,6 @@ function onResize() {
   const height = window.innerHeight;
   renderer.setSize(width, height);
   if (camera) {
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    applyBlenderSensorFit(camera, width / height);
   }
 }

@@ -51,6 +51,17 @@ export async function loadModel(onProgress) {
   camera.position.copy(worldPosition);
   camera.quaternion.copy(worldQuaternion);
 
+  // Replicate Blender's focal length with Sensor Fit "Auto": the sensor
+  // width maps onto whichever viewport side is longer. glTF only stores
+  // yfov for the export aspect ratio, so recover the tangent of the
+  // half-FOV across the longer side once; applyBlenderSensorFit() then
+  // derives the vertical FOV for any window shape (landscape desktop or
+  // portrait phone) instead of keeping yfov fixed.
+  const exportAspect = cameraNode.aspect || 1;
+  const tanHalfYFov = Math.tan(THREE.MathUtils.degToRad(cameraNode.fov) / 2);
+  camera.userData.tanHalfLongSide =
+    exportAspect >= 1 ? tanHalfYFov * exportAspect : tanHalfYFov;
+
   const walkHeight = worldPosition.y;
 
   const buildingNode = findByName(scene, BUILDING_NODE_NAME);
@@ -106,6 +117,21 @@ export async function loadModel(onProgress) {
   });
 
   return { scene, camera, walkHeight, buildingLines, walls };
+}
+
+/**
+ * Sets camera.aspect and the vertical FOV so the longer viewport side
+ * always spans the Blender camera's horizontal-sensor FOV (Sensor Fit
+ * "Auto"), e.g. 30mm on a 36mm sensor reads the same on any screen.
+ */
+export function applyBlenderSensorFit(camera, aspect) {
+  camera.aspect = aspect;
+  const tanHalfLong = camera.userData.tanHalfLongSide;
+  if (tanHalfLong) {
+    const tanHalfV = aspect >= 1 ? tanHalfLong / aspect : tanHalfLong;
+    camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(tanHalfV));
+  }
+  camera.updateProjectionMatrix();
 }
 
 // GLTFLoader sanitizes node names (spaces/dots stripped, e.g. "Camera.001"
