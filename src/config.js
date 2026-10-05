@@ -19,17 +19,20 @@ export const WALL_NODE_NAMES = [
 // ---------------------------------------------------------------------------
 // WIREFRAME
 // ---------------------------------------------------------------------------
-// THREE.EdgesGeometry keeps an edge when the angle between the two faces
-// sharing it is >= this threshold (in degrees). Blender's exported mesh is
-// already quad/ngon based; glTF always triangulates on export, which adds a
-// diagonal per n-gon. Those diagonals sit at a perfectly flat 0 degrees, so a
-// small non-zero threshold removes them while keeping every real edge
-// (panel seams, mesh-grille strands, column flutes, etc.) that the Blender
-// "Wireframe" viewport shading reference shows.
+// Each mesh edge is classified by the angle (degrees) between the two faces
+// sharing it:
+//  - below FLAT_EDGE_DEGREES: never drawn. glTF triangulates every quad /
+//    n-gon on export, adding perfectly flat (0°) diagonals; this drops them.
+//  - at or above CREASE_EDGE_DEGREES: always drawn (real corners).
+//  - in between: facets of curved surfaces (cylinders, pipes, flutes),
+//    drawn only where they form the silhouette from the current camera, so
+//    a cylinder reads as its outline + rims instead of every subdivision.
+// Loose edges (exported with glTF "Loose Edges") are always drawn as-is.
 //
-// Raise this value to thin out the linework (keep only harder corners);
-// lower it toward 0 to show more of the raw mesh density.
-export const EDGE_THRESHOLD_DEGREES = 1;
+// Lower CREASE_EDGE_DEGREES to keep more facet lines permanently; raise it
+// for a sparser, more minimal drawing.
+export const FLAT_EDGE_DEGREES = 1;
+export const CREASE_EDGE_DEGREES = 40;
 
 export const LINE_COLOR = 0x111111;
 export const BACKGROUND_COLOR = 0xffffff;

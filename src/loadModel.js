@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 import { buildWireframeFromNode } from "./wireframe.js";
 import {
   MODEL_URL,
@@ -18,9 +19,10 @@ import {
  *    world position / orientation / vertical FOV.
  *  - walkHeight: fixed world-space Y (the app never moves the camera off it).
  *  - buildingLines: static LineSegments for the whole building shell.
- *  - walls: [{ name, group, lines, proxy, baseQuaternion }] — group is the
- *    original glTF node (untouched position/quaternion/scale = the
- *    Blender-authored pivot), lines is the visible wireframe, proxy is an
+ *  - walls: [{ name, group, lines, lineMaterials, proxy, baseQuaternion }]
+ *    — group is the original glTF node (untouched position/quaternion/scale
+ *    = the Blender-authored pivot), lines is the always-drawn wireframe,
+ *    lineMaterials covers it plus the silhouette lines, proxy is an
  *    invisible (colorWrite:false) solid mesh reused for two things: wall
  *    raycasting AND depth-buffer occlusion (hidden-line removal) — see
  *    makeOccluderMaterial().
@@ -68,17 +70,15 @@ export async function loadModel(onProgress) {
   if (!buildingNode) {
     throw new Error(`Building node "${BUILDING_NODE_NAME}" was not found in ${MODEL_URL}`);
   }
-  const { edges: buildingEdges, solid: buildingSolid } = buildWireframeFromNode(buildingNode);
+  const building = buildWireframeFromNode(buildingNode);
 
-  if (buildingSolid) {
-    const buildingOccluder = new THREE.Mesh(buildingSolid, makeOccluderMaterial());
+  if (building.solid) {
+    const buildingOccluder = new THREE.Mesh(building.solid, makeOccluderMaterial());
     buildingOccluder.renderOrder = OCCLUDER_RENDER_ORDER;
     buildingNode.add(buildingOccluder);
   }
 
-  const buildingLines = new THREE.LineSegments(buildingEdges, makeLineMaterial());
-  buildingLines.renderOrder = LINE_RENDER_ORDER;
-  buildingNode.add(buildingLines);
+  const { lines: buildingLines } = addLines(buildingNode, building);
 
   const walls = WALL_NODE_NAMES.map((name) => {
     const group = findByName(scene, name);
@@ -86,12 +86,9 @@ export async function loadModel(onProgress) {
       throw new Error(`Movable wall node "${name}" was not found in ${MODEL_URL}`);
     }
 
-    const { edges, solid } = buildWireframeFromNode(group);
-
-    const lineMaterial = makeLineMaterial();
-    const lines = new THREE.LineSegments(edges, lineMaterial);
-    lines.renderOrder = LINE_RENDER_ORDER;
-    group.add(lines);
+    const wireframe = buildWireframeFromNode(group);
+    const { solid } = wireframe;
+    const { lines, materials: lineMaterials } = addLines(group, wireframe);
 
     // Doubles as the depth-buffer occluder (hidden-line removal) and the
     // raycast target for wall selection — same merged geometry, no
@@ -110,6 +107,7 @@ export async function loadModel(onProgress) {
       name,
       group,
       lines,
+      lineMaterials,
       proxy,
       baseQuaternion: group.quaternion.clone(),
       angleDeg: 0,
@@ -156,6 +154,41 @@ function findByName(root, name) {
 // wireframe shading (hidden-line removal).
 const OCCLUDER_RENDER_ORDER = 0;
 const LINE_RENDER_ORDER = 1;
+
+// Adds the always-drawn lines and the silhouette-only (conditional) lines
+// produced by buildWireframeFromNode() to `node`. Returns the always-drawn
+// LineSegments plus every line material, so the wall selection pulse can
+// fade both kinds together.
+function addLines(node, { edges, conditional }) {
+  const materials = [];
+  let lines = null;
+
+  if (edges) {
+    const material = makeLineMaterial();
+    lines = new THREE.LineSegments(edges, material);
+    lines.renderOrder = LINE_RENDER_ORDER;
+    node.add(lines);
+    materials.push(material);
+  }
+
+  if (conditional) {
+    const material = new LDrawConditionalLineMaterial({
+      color: LINE_COLOR,
+      transparent: true,
+      opacity: 1,
+      depthTest: true,
+      depthWrite: false,
+    });
+    const silhouette = new THREE.LineSegments(conditional, material);
+    silhouette.renderOrder = LINE_RENDER_ORDER;
+    // Bounding volume is computed from `position` only, which already
+    // spans every conditional segment, so frustum culling stays correct.
+    node.add(silhouette);
+    materials.push(material);
+  }
+
+  return { lines, materials };
+}
 
 function makeLineMaterial() {
   return new THREE.LineBasicMaterial({

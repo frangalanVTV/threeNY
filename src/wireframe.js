@@ -1,14 +1,15 @@
 import * as THREE from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { EDGE_THRESHOLD_DEGREES } from "./config.js";
+import { mergeGeometries, mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+import { FLAT_EDGE_DEGREES, CREASE_EDGE_DEGREES } from "./config.js";
 
 /**
  * Walks a loaded glTF node (which may be a single Mesh or a Group of
- * per-material Mesh primitives), and produces:
- *  - one merged edges LineSegments geometry (in the node's local space),
- *    built once via THREE.EdgesGeometry so it never needs to be
- *    regenerated at render time.
- *  - one merged triangle geometry (same local space) for raycasting only.
+ * per-material Mesh primitives), and produces, all in the node's local
+ * space and built once at load (never regenerated at render time):
+ *  - edges: always-drawn lines (hard corners + authored loose edges).
+ *  - conditional: curved-surface facet edges, drawn only where they form
+ *    the silhouette from the current camera (see classifyEdges).
+ *  - solid: merged triangles for raycasting / depth occlusion.
  *
  * The original meshes/materials/textures are disposed — the wireframe
  * viewer never needs shaded materials, so keeping them around would only
@@ -16,6 +17,7 @@ import { EDGE_THRESHOLD_DEGREES } from "./config.js";
  */
 export function buildWireframeFromNode(node) {
   const edgeGeometries = [];
+  const conditionalGeometries = [];
   const solidGeometries = [];
 
   node.updateWorldMatrix(true, true);
@@ -54,8 +56,9 @@ export function buildWireframeFromNode(node) {
     if (sourceGeometry.index) positionOnly.setIndex(sourceGeometry.index);
     positionOnly.applyMatrix4(localMatrix);
 
-    const edges = new THREE.EdgesGeometry(positionOnly, EDGE_THRESHOLD_DEGREES);
-    edgeGeometries.push(edges);
+    const { hard, conditional } = classifyEdges(positionOnly);
+    if (hard) edgeGeometries.push(hard);
+    if (conditional) conditionalGeometries.push(conditional);
 
     const solid = positionOnly.clone();
     solid.deleteAttribute("normal");
@@ -72,8 +75,15 @@ export function buildWireframeFromNode(node) {
     }
   });
 
-  const mergedEdges = mergeGeometries(edgeGeometries, false);
+  const mergedEdges = edgeGeometries.length
+    ? mergeGeometries(edgeGeometries, false)
+    : null;
   edgeGeometries.forEach((g) => g.dispose());
+
+  const mergedConditional = conditionalGeometries.length
+    ? mergeGeometries(conditionalGeometries, false)
+    : null;
+  conditionalGeometries.forEach((g) => g.dispose());
 
   const mergedSolid = solidGeometries.length
     ? mergeGeometries(solidGeometries, false)
@@ -92,7 +102,134 @@ export function buildWireframeFromNode(node) {
     node.material = new THREE.MeshBasicMaterial({ visible: false });
   }
 
-  return { edges: mergedEdges, solid: mergedSolid };
+  return { edges: mergedEdges, conditional: mergedConditional, solid: mergedSolid };
+}
+
+/**
+ * Splits a triangle mesh's edges into three groups, by the angle between
+ * the two faces that share each edge:
+ *  - below FLAT_EDGE_DEGREES: dropped (coplanar, incl. the triangulation
+ *    diagonals glTF adds to every quad/n-gon).
+ *  - at or above CREASE_EDGE_DEGREES, plus open/non-manifold edges: "hard"
+ *    — always drawn (box corners, panel edges, rims).
+ *  - in between: "conditional" — the facets of curved surfaces (cylinder
+ *    sides, flutes, pipes). Each carries the two opposite triangle vertices
+ *    so LDrawConditionalLineMaterial can draw it only where it is the
+ *    silhouette from the current camera, like Freestyle / Line Art.
+ *
+ * glTF splits vertices along UV seams and hard normals, so adjacency is
+ * computed on a position-welded copy.
+ */
+function classifyEdges(geometry) {
+  const welded = mergeVertices(geometry, 1e-4);
+  const pos = welded.getAttribute("position");
+  const index = welded.index.array;
+  const vertexCount = pos.count;
+
+  const cosFlat = Math.cos(THREE.MathUtils.degToRad(FLAT_EDGE_DEGREES));
+  const cosCrease = Math.cos(THREE.MathUtils.degToRad(CREASE_EDGE_DEGREES));
+
+  const triangleCount = index.length / 3;
+  const normals = new Float32Array(triangleCount * 3);
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const n = new THREE.Vector3();
+
+  // key -> [vA, vB, face0, opposite0, face1, opposite1, faceCount]
+  const edgeMap = new Map();
+
+  for (let t = 0; t < triangleCount; t++) {
+    const i0 = index[t * 3];
+    const i1 = index[t * 3 + 1];
+    const i2 = index[t * 3 + 2];
+    a.fromBufferAttribute(pos, i0);
+    b.fromBufferAttribute(pos, i1);
+    c.fromBufferAttribute(pos, i2);
+    n.subVectors(c, b).cross(a.clone().sub(b));
+    if (n.lengthSq() < 1e-20) continue; // degenerate triangle
+    n.normalize();
+    normals[t * 3] = n.x;
+    normals[t * 3 + 1] = n.y;
+    normals[t * 3 + 2] = n.z;
+
+    const tri = [i0, i1, i2];
+    for (let e = 0; e < 3; e++) {
+      const v0 = tri[e];
+      const v1 = tri[(e + 1) % 3];
+      const opposite = tri[(e + 2) % 3];
+      const lo = Math.min(v0, v1);
+      const hi = Math.max(v0, v1);
+      const key = lo * vertexCount + hi;
+      const entry = edgeMap.get(key);
+      if (!entry) {
+        edgeMap.set(key, [lo, hi, t, opposite, -1, -1, 1]);
+      } else {
+        if (entry[6] === 1) {
+          entry[4] = t;
+          entry[5] = opposite;
+        }
+        entry[6]++;
+      }
+    }
+  }
+
+  const hard = [];
+  const condPosition = [];
+  const condControl0 = [];
+  const condControl1 = [];
+  const condDirection = [];
+
+  for (const [lo, hi, f0, o0, f1, o1, count] of edgeMap.values()) {
+    a.fromBufferAttribute(pos, lo);
+    b.fromBufferAttribute(pos, hi);
+
+    if (count !== 2) {
+      hard.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      continue;
+    }
+
+    const dot =
+      normals[f0 * 3] * normals[f1 * 3] +
+      normals[f0 * 3 + 1] * normals[f1 * 3 + 1] +
+      normals[f0 * 3 + 2] * normals[f1 * 3 + 2];
+
+    if (dot > cosFlat) continue;
+
+    if (dot <= cosCrease) {
+      hard.push(a.x, a.y, a.z, b.x, b.y, b.z);
+      continue;
+    }
+
+    c.fromBufferAttribute(pos, o0);
+    n.fromBufferAttribute(pos, o1);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const dz = b.z - a.z;
+    condPosition.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    condControl0.push(c.x, c.y, c.z, c.x, c.y, c.z);
+    condControl1.push(n.x, n.y, n.z, n.x, n.y, n.z);
+    condDirection.push(dx, dy, dz, dx, dy, dz);
+  }
+
+  welded.dispose();
+
+  let hardGeometry = null;
+  if (hard.length) {
+    hardGeometry = new THREE.BufferGeometry();
+    hardGeometry.setAttribute("position", new THREE.Float32BufferAttribute(hard, 3));
+  }
+
+  let conditionalGeometry = null;
+  if (condPosition.length) {
+    conditionalGeometry = new THREE.BufferGeometry();
+    conditionalGeometry.setAttribute("position", new THREE.Float32BufferAttribute(condPosition, 3));
+    conditionalGeometry.setAttribute("control0", new THREE.Float32BufferAttribute(condControl0, 3));
+    conditionalGeometry.setAttribute("control1", new THREE.Float32BufferAttribute(condControl1, 3));
+    conditionalGeometry.setAttribute("direction", new THREE.Float32BufferAttribute(condDirection, 3));
+  }
+
+  return { hard: hardGeometry, conditional: conditionalGeometry };
 }
 
 function disposeMaterial(material) {

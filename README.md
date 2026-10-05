@@ -43,7 +43,7 @@ framework preset automatically (`npm run build`, output directory `dist`).
 | What | Where |
 | --- | --- |
 | The canonical 3D scene | `public/BASE.glb` (served as-is, untouched geometry) |
-| EdgesGeometry threshold | `src/config.js` → `EDGE_THRESHOLD_DEGREES` |
+| Edge classification (flat / silhouette / crease) | `src/config.js` → `FLAT_EDGE_DEGREES`, `CREASE_EDGE_DEGREES` |
 | Movement speed | `src/config.js` → `MOVE_SPEED` |
 | Mouse/touch look sensitivity | `src/config.js` → `LOOK_SENSITIVITY` |
 | Pitch limit | `src/config.js` → `MAX_PITCH` |
@@ -119,22 +119,30 @@ camera can't flip.
 
 ## Wireframe method
 
-`BASE.glb`'s meshes are quad/ngon based in Blender but glTF always
-triangulates on export, which adds a diagonal per polygon. Those diagonals
-sit at a perfectly flat 0° dihedral angle, so `THREE.EdgesGeometry` with a
-small non-zero threshold (`EDGE_THRESHOLD_DEGREES`, default `1`) removes
-them while keeping every real edge — panel seams, the mesh-grille
-strands, column flutes — matching Blender's native "Wireframe" viewport
-shading reference. Edge geometry is generated once at load time per
-top-level node and merged into a single `LineSegments` draw call; it is
-never regenerated per frame.
+Every mesh edge is classified once at load time by the angle between the
+two faces that share it (`src/wireframe.js` → `classifyEdges`):
+
+- **Below `FLAT_EDGE_DEGREES` (1°)** — dropped. glTF triangulates every
+  quad/n-gon on export, adding perfectly flat diagonals.
+- **At or above `CREASE_EDGE_DEGREES` (40°)**, plus open edges — always
+  drawn: real corners, panel edges, rims.
+- **In between** — the facets of curved surfaces (cylinders, pipes,
+  flutes). These are drawn with three.js's `LDrawConditionalLineMaterial`
+  ("conditional lines"), which shows a facet edge only where it is the
+  silhouette from the current camera. A cylinder reads as its outline and
+  rims instead of every subdivision, like Freestyle / Line Art in Blender.
+
+Loose edges (Blender edges with no face — export `BASE.glb` with glTF
+**Data → Mesh → Loose Edges** enabled) are always drawn exactly as authored.
+
+Edge geometry is never regenerated per frame; the silhouette test runs in
+the vertex shader.
 
 ## Performance notes
 
 - Per top-level node (the building, each wall), all primitives are merged
-  into one `LineSegments` draw call — 7 draw calls total for the whole
-  scene, regardless of the ~275k line segments in the building's
-  mesh-grille detail.
+  into at most two line draw calls (always-drawn + silhouette) plus one
+  depth occluder, regardless of how many line segments the node has.
 - Original PBR materials/textures are discarded immediately after edge
   extraction — the viewer only ever needs line geometry.
 - Wall raycasting tests only the six invisible wall proxy meshes, never

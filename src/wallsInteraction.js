@@ -71,7 +71,7 @@ export class WallInteraction {
 
   select(wall) {
     if (this.selected && this.selected !== wall) {
-      this.selected.lines.material.opacity = 1;
+      setOpacity(this.selected, 1);
     }
 
     this.selected = wall;
@@ -109,7 +109,14 @@ export class WallInteraction {
     if (!this.selected) return;
     this._pulseT += deltaSeconds * SELECTION_PULSE_SPEED;
     const t = (Math.sin(this._pulseT) + 1) / 2;
-    this.selected.lines.material.opacity =
-      SELECTION_PULSE_MIN + t * (SELECTION_PULSE_MAX - SELECTION_PULSE_MIN);
+    setOpacity(
+      this.selected,
+      SELECTION_PULSE_MIN + t * (SELECTION_PULSE_MAX - SELECTION_PULSE_MIN)
+    );
   }
+}
+
+// Always-drawn and silhouette lines pulse together.
+function setOpacity(wall, opacity) {
+  for (const material of wall.lineMaterials) material.opacity = opacity;
 }
