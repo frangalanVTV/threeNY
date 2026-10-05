@@ -1,10 +1,19 @@
+import { exportViewVectors, toSVG, toPDF } from "./vectorExport.js";
+
 /**
  * "SAVE VIEW" — captures exactly what the WebGL canvas shows (camera +
  * wireframe + current wall rotations), with none of the HTML overlay UI,
  * since the UI is never drawn into the canvas in the first place.
+ *
+ * The modal exports that view as PNG (the capture itself) or, via SVG /
+ * PDF, as real vector strokes for plotters / Illustrator (see
+ * vectorExport.js). The vectors are computed once per capture, from the
+ * camera as it was when SAVE VIEW was pressed, and shared by both formats.
  */
-export function setupSaveView({ renderer, scene, camera, button, modal, image, downloadBtn, closeBtn }) {
+export function setupSaveView({ renderer, scene, camera, button, modal, image, downloadBtn, svgBtn, pdfBtn, closeBtn }) {
   button.addEventListener("click", capture);
+
+  const canShareFiles = !!(navigator.share && navigator.canShare);
 
   function capture() {
     renderer.render(scene, camera);
@@ -12,16 +21,38 @@ export function setupSaveView({ renderer, scene, camera, button, modal, image, d
     image.src = dataUrl;
     modal.hidden = false;
 
-    const canShareFiles = !!(navigator.share && navigator.canShare);
-    downloadBtn.textContent = canShareFiles ? "SHARE" : "DOWNLOAD";
-    downloadBtn.onclick = () => handleExport(dataUrl, canShareFiles);
+    downloadBtn.onclick = async () => {
+      const blob = await (await fetch(dataUrl)).blob();
+      exportFile(blob, "node-ny-view.png");
+    };
+
+    let vectors = null;
+    const vectorButton = (btn, label, write, type, filename) => {
+      btn.textContent = label;
+      btn.disabled = false;
+      btn.onclick = () => {
+        btn.textContent = "…";
+        btn.disabled = true;
+        // Let the button repaint before the (blocking) export runs.
+        setTimeout(() => {
+          try {
+            vectors ??= exportViewVectors({ renderer, scene, camera });
+            exportFile(new Blob([write(vectors)], { type }), filename);
+          } finally {
+            btn.textContent = label;
+            btn.disabled = false;
+          }
+        }, 30);
+      };
+    };
+    vectorButton(svgBtn, "SVG", toSVG, "image/svg+xml", "node-ny-view.svg");
+    vectorButton(pdfBtn, "PDF", toPDF, "application/pdf", "node-ny-view.pdf");
   }
 
-  async function handleExport(dataUrl, canShareFiles) {
+  async function exportFile(blob, filename) {
     if (canShareFiles) {
       try {
-        const blob = await (await fetch(dataUrl)).blob();
-        const file = new File([blob], "node-ny-view.png", { type: "image/png" });
+        const file = new File([blob], filename, { type: blob.type });
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: "NODE NY" });
           return;
@@ -30,10 +61,12 @@ export function setupSaveView({ renderer, scene, camera, button, modal, image, d
         // User cancelled the share sheet, or it failed — fall back to download.
       }
     }
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = dataUrl;
-    link.download = "node-ny-view.png";
+    link.href = url;
+    link.download = filename;
     link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
 
   closeBtn.addEventListener("click", () => {

@@ -38,6 +38,19 @@ export const LINE_COLOR = 0x111111;
 export const BACKGROUND_COLOR = 0xffffff;
 
 // ---------------------------------------------------------------------------
+// VECTOR EXPORT (SVG / PDF)
+// ---------------------------------------------------------------------------
+// Long-side resolution (px) of the offscreen depth map used for hidden-line
+// removal in the SVG / PDF export. Higher = more precise line cut-offs behind
+// objects, at the cost of export time / memory. Capped by the GPU's limit.
+export const VECTOR_DEPTH_RESOLUTION = 4096;
+// Width of the exported drawing in units — SVG user units / PDF points
+// (height follows the view's aspect ratio). Scale freely in Illustrator /
+// plotter software.
+export const VECTOR_OUTPUT_WIDTH = 1600;
+export const VECTOR_STROKE_WIDTH = 0.5;
+
+// ---------------------------------------------------------------------------
 // NAVIGATION
 // ---------------------------------------------------------------------------
 // Walking speed, in world units (meters) per second.

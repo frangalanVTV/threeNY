@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
+import { SilhouetteLineMaterial } from "./silhouetteLineMaterial.js";
 import { buildWireframeFromNode } from "./wireframe.js";
 import {
   MODEL_URL,
@@ -172,7 +172,7 @@ function addLines(node, { edges, conditional }) {
   }
 
   if (conditional) {
-    const material = new LDrawConditionalLineMaterial({
+    const material = new SilhouetteLineMaterial({
       color: LINE_COLOR,
       transparent: true,
       opacity: 1,

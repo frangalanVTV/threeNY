@@ -87,11 +87,13 @@ derivation.
 src/
   config.js            tunable constants (see table above)
   loadModel.js          GLTFLoader + locating Camera.001 / BUILDING / WALL 1-6
-  wireframe.js          EdgesGeometry generation + geometry merging (cached once at load)
+  wireframe.js          edge classification (flat / silhouette / crease) + merging (once at load)
+  silhouetteLineMaterial.js  view-space silhouette shader for curved-surface edges
+  vectorExport.js       SVG / PDF vector export with hidden-line removal
   navigation.js         shared first-person walk controller (WASD + drag-to-look)
   joystick.js            mobile virtual joystick (movement only)
   wallsInteraction.js    raycast selection, pulse feedback, rotation slider
-  saveView.js            canvas capture, modal, download/share
+  saveView.js            canvas capture, modal, PNG / SVG / PDF download/share
   main.js                wires everything together, render loop, resize
   style.css               all UI styling
 ```
@@ -127,16 +129,29 @@ two faces that share it (`src/wireframe.js` → `classifyEdges`):
 - **At or above `CREASE_EDGE_DEGREES` (40°)**, plus open edges — always
   drawn: real corners, panel edges, rims.
 - **In between** — the facets of curved surfaces (cylinders, pipes,
-  flutes). These are drawn with three.js's `LDrawConditionalLineMaterial`
-  ("conditional lines"), which shows a facet edge only where it is the
-  silhouette from the current camera. A cylinder reads as its outline and
-  rims instead of every subdivision, like Freestyle / Line Art in Blender.
+  flutes). These are drawn with `SilhouetteLineMaterial` (three.js's
+  "conditional lines" with a view-space test), which shows a facet edge
+  only where it is the silhouette from the current camera. A cylinder reads
+  as its outline and rims instead of every subdivision, like Freestyle /
+  Line Art in Blender.
 
 Loose edges (Blender edges with no face — export `BASE.glb` with glTF
 **Data → Mesh → Loose Edges** enabled) are always drawn exactly as authored.
 
 Edge geometry is never regenerated per frame; the silhouette test runs in
 the vertex shader.
+
+## Vector export (SVG / PDF, for plotters)
+
+SAVE VIEW offers **PNG** (the screen capture), and **SVG** / **PDF** — the
+current view as real vector strokes (`src/vectorExport.js`): the occluders
+are rendered offscreen to a depth map (`VECTOR_DEPTH_RESOLUTION`, default
+4096 px on the long side), every line — including the silhouettes for this
+camera, same test as on screen — is clipped to the view and cut where it
+passes behind a surface, and the visible pieces are deduplicated and
+chained into polylines (fewer pen lifts). The PDF is a single page of
+stroked paths, 1 unit = 1 pt (`VECTOR_OUTPUT_WIDTH` wide). Open either in
+Illustrator / Inkscape to convert to DXF or HPGL if a plotter needs it.
 
 ## Performance notes
 
@@ -158,7 +173,8 @@ the vertex shader.
 
 Renders the current frame and reads it straight off the WebGL canvas via
 `toDataURL()` — the HTML UI (joystick, slider, buttons) is a separate
-overlay never drawn into the canvas, so it's excluded automatically. On
-devices with the Web Share API (`navigator.share`/`canShare`), the action
-button reads "SHARE" and opens the native share sheet; otherwise it reads
-"DOWNLOAD" and saves the PNG directly.
+overlay never drawn into the canvas, so it's excluded automatically. The
+modal's **PNG**, **SVG** and **PDF** buttons export that same view as an
+image or as vectors (see "Vector export" above). On devices with the Web
+Share API (`navigator.share`/`canShare`) each opens the native share sheet;
+otherwise the file downloads directly.

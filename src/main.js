@@ -53,6 +53,8 @@ async function init() {
     modal: document.getElementById("save-view-modal"),
     image: document.getElementById("save-view-image"),
     downloadBtn: document.getElementById("save-view-download"),
+    svgBtn: document.getElementById("save-view-svg"),
+    pdfBtn: document.getElementById("save-view-pdf"),
     closeBtn: document.getElementById("save-view-close"),
   });
 

@@ -114,7 +114,7 @@ export function buildWireframeFromNode(node) {
  *    — always drawn (box corners, panel edges, rims).
  *  - in between: "conditional" — the facets of curved surfaces (cylinder
  *    sides, flutes, pipes). Each carries the two opposite triangle vertices
- *    so LDrawConditionalLineMaterial can draw it only where it is the
+ *    so SilhouetteLineMaterial can draw it only where it is the
  *    silhouette from the current camera, like Freestyle / Line Art.
  *
  * glTF splits vertices along UV seams and hard normals, so adjacency is
